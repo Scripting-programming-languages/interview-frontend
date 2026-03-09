@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios'; 
-import '../styles/register.css';
+import '../styles/auth.css';
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -40,9 +40,6 @@ export default function Register() {
 
   return (
     <div className="auth-container">
-      <div className="auth-bg-blob"></div>
-      <div className="auth-bg-blob secondary"></div>
-
       <form className="auth-card" onSubmit={handleRegister}>
         <h2>Регистрация</h2>
 
