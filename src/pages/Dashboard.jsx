@@ -56,7 +56,7 @@ export default function Dashboard() {
             attempts.map((item) => (
               <div 
                 key={item.attempt_id} 
-                className="history-item"
+                className={`history-item ${item.status !== 'finished' ? 'disabled' : ''}`}
                 onClick={() => {
                   if (item.status === 'finished') {
                     navigate(`/results/${item.attempt_id}`);
@@ -72,7 +72,7 @@ export default function Dashboard() {
 
                 <div className="right">
                   <div className="score">
-                    {item.overall_score !== undefined && item.overall_score !== null 
+                    {item.status === 'finished' && item.overall_score !== null 
                       ? `${item.overall_score}%` 
                       : '—'}
                   </div>

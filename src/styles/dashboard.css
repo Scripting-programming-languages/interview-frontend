@@ -91,6 +91,16 @@
   padding-left: 6px;
 }
 
+.history-item.disabled {
+  cursor: default;
+  opacity: 0.6;
+  filter: grayscale(0.8); 
+}
+
+.history-item.disabled:hover {
+  padding-left: 0; 
+}
+
 .dashboard-card h1 {
   margin: 0;
   font-size: 24px;
