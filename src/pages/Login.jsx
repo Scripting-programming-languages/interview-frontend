@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { jwtDecode } from 'jwt-decode';
 import api from '../api/axios';
 import '../styles/auth.css';
 
@@ -29,6 +30,8 @@ export default function Login() {
 
         localStorage.setItem('accessToken', access_token);
         localStorage.setItem('refreshToken', refresh_token);
+        const decoded = jwtDecode(access_token);
+        localStorage.setItem('userId', decoded.user_id);
 
         navigate('/dashboard');
       }
