@@ -7,6 +7,10 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
+  const publicPaths = ['/auth/login', '/auth/register'];
+  if (publicPaths.some(path => config.url.includes(path))) {
+    return config;
+  }
   const token = localStorage.getItem('accessToken');
   if (token && token !== "undefined" && token !== "null") {
     config.headers.Authorization = `Bearer ${token}`;
@@ -20,6 +24,10 @@ api.interceptors.response.use(
     
     const originalRequest = error.config;
 
+    if (originalRequest.url.includes('/auth/login')) {
+      return Promise.reject(error); 
+    }
+    
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       

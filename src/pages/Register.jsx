@@ -27,7 +27,7 @@ export default function Register() {
     try {
       const response = await api.post('/auth/register', formData);
 
-      if (res.status === 200 || res.status === 201) {
+      if (response.status === 200) {
         const { access_token, refresh_token } = response.data;
         localStorage.setItem('accessToken', access_token);
         localStorage.setItem('refreshToken', refresh_token);
