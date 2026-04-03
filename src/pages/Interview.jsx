@@ -149,19 +149,28 @@ export default function InterviewPage() {
     }
   }
 
-  async function finishInterview() {
+  async function submitCurrentAnswer() {
+    const formData = new FormData();
+    formData.append("user_answer", audioBlob, "answer.webm");
+    formData.append("audio_duration", String(Math.round(audioDuration)));
+
+    await api.post(
+      `/attempts/${attemptId}/questions/${currentQuestion.question_id}/answer`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+  }
+
+  async function finishInterview({ goToResults = true } = {}) {
     if (!attemptId) return;
 
-    setIsPending(true);
-
-    try {
-      const { data } = await api.patch(`/attempts/${attemptId}/finish`);
+    const { data } = await api.patch(`/attempts/${attemptId}/finish`);
+    if (goToResults) {
       navigate(`/results/${attemptId}`, {
         state: { result: data, questions },
       });
-    } catch (err) {
-      setError(err?.response?.data?.error || "Не удалось завершить собеседование");
-      setIsPending(false);
+    } else {
+      navigate("/dashboard");
     }
   }
 
@@ -177,25 +186,18 @@ export default function InterviewPage() {
       !attemptId ||
       !currentQuestion ||
       !audioBlob
-    )
+    ) {
       return;
+    }
 
     setIsPending(true);
     setError("");
 
     try {
-      const formData = new FormData();
-      formData.append("user_answer", audioBlob, "answer.webm");
-      formData.append("audio_duration", String(Math.round(audioDuration)));
-
-      await api.post(
-        `/attempts/${attemptId}/questions/${currentQuestion.question_id}/answer`,
-        formData,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
+      await submitCurrentAnswer();
 
       if (current === questions.length - 1) {
-        await finishInterview();
+        await finishInterview({ goToResults: true });
       } else {
         setCurrent((prev) => prev + 1);
         setAudioBlob(null);
@@ -213,8 +215,25 @@ export default function InterviewPage() {
   }
 
   async function handleFinishEarly() {
-    if (isPending || isRecording) return; // запрещаем завершать во время записи
-    await finishInterview();
+    if (isPending || isRecording || !attemptId) return;
+
+    setIsPending(true);
+    setError("");
+
+    try {
+      if (audioBlob && currentQuestion) {
+        await submitCurrentAnswer();
+      }
+      await finishInterview({ goToResults: false });
+
+    } catch (err) {
+      setError(
+        err?.response?.data?.error ||
+          err.message ||
+          "Не удалось завершить собеседование"
+      );
+      setIsPending(false);
+    }
   }
 
   if (isPageLoading) {
