@@ -4,6 +4,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import SelectRole from './pages/SelectRole';
 import Interview from './pages/Interview';
+import Results from './pages/Results';
 import './App.css';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/select" element={<SelectRole />} />
           <Route path="/interview" element={<Interview />} />
+          <Route path="/results/:attemptId" element={<Results />} />
         </Routes>
       </div>
     </BrowserRouter>

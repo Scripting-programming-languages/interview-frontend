@@ -72,8 +72,8 @@ export default function Dashboard() {
 
                 <div className="right">
                   <div className="score">
-                    {item.status === 'finished' && item.overall_score !== null 
-                      ? `${item.overall_score}%` 
+                    {item.status === 'finished' && item.overall_answer_score !== null 
+                      ? `${item.overall_answer_score}%` 
                       : '—'}
                   </div>
                 </div>
