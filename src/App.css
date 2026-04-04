@@ -2,6 +2,8 @@
   --color-primary: #005a9e;
   --color-secondary: #0077b6;
   --color-tertiary: #48cae4;
+  color-scheme: light; 
+  forced-color-adjust: none;
 }
 
 #root {

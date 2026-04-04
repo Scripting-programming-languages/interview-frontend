@@ -45,7 +45,7 @@ export default function SelectRole() {
       const response = await api.post(`/courses/${selectedCourseId}/attempt`);
       const attemptData = response.data;
       
-      navigate("/interview", {
+      navigate(`/interview/${selectedCourseId}`, {
         state: { 
           attemptId: attemptData.attempt_id, 
           questions: attemptData.questions 
