@@ -6,66 +6,97 @@ const api = axios.create({
   baseURL: BASE_URL,
 });
 
-api.interceptors.request.use((config) => {
-  const publicPaths = ['/auth/login', '/auth/register'];
-  if (publicPaths.some(path => config.url.includes(path))) {
-    return config;
+let refreshTimer = null;
+
+export const storage = {
+  get: (key) => {
+    const val = localStorage.getItem(key);
+    return (val === 'undefined' || val === 'null') ? null : val;
+  },
+  set: (access, refresh) => {
+    localStorage.setItem('accessToken', access);
+    localStorage.setItem('refreshToken', refresh);
+  },
+  clear: () => {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
   }
-  const token = localStorage.getItem('accessToken');
-  if (token && token !== "undefined" && token !== "null") {
+};
+
+function parseJwt(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1]));
+  } catch { return null; }
+}
+
+export function initAuth() {
+  const token = storage.get('accessToken');
+  if (token) {
+    scheduleTokenRefresh(token);
+  }
+}
+
+async function refreshTokens() {
+  try {
+    const refreshToken = storage.get('refreshToken');
+    if (!refreshToken) throw new Error();
+
+    const res = await axios.post(`${BASE_URL}/auth/refresh_token`, {}, {
+      headers: { Authorization: `Bearer ${refreshToken}` }
+    });
+
+    const { access_token, refresh_token } = res.data;
+    storage.set(access_token, refresh_token);
+    scheduleTokenRefresh(access_token);
+    return access_token;
+  } catch (e) {
+    logoutUser();
+    throw e;
+  }
+}
+
+export function scheduleTokenRefresh(token) {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  
+  const accessToken = token || storage.get('accessToken');
+  const payload = parseJwt(accessToken);
+  if (!payload?.exp) return;
+
+  const delay = (payload.exp * 1000) - Date.now() - 60000; // за 1 мин до конца
+  refreshTimer = setTimeout(refreshTokens, Math.max(delay, 0));
+}
+
+// Интерцептор запросов
+api.interceptors.request.use((config) => {
+  const token = storage.get('accessToken');
+  if (token && !config.url.includes('/auth/')) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
-}, (error) => Promise.reject(error));
+});
 
+// Интерцептор ответов
 api.interceptors.response.use(
-  (response) => response, 
+  (res) => res,
   async (error) => {
-    
     const originalRequest = error.config;
+    const isAuthError = error.response?.status === 401 || error.response?.status === 403;
+    const isRefreshRequest = originalRequest.url.includes('/auth/refresh_token');
 
-    if (originalRequest.url.includes('/auth/login')) {
-      return Promise.reject(error); 
-    }
-    
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (isAuthError && !originalRequest._retry && !isRefreshRequest) {
       originalRequest._retry = true;
-      
-      const refreshToken = localStorage.getItem('refreshToken');
-
-      if (!refreshToken) {
-        logoutUser();
-        return Promise.reject(error);
-      }
-
-      try {
-        const res = await axios.post(`${BASE_URL}/auth/refresh_token`, {}, {
-          headers: { Authorization: `Bearer ${refreshToken}` }
-        });
-
-        if (res.status === 200) {
-          const { access_token, refresh_token } = res.data;
-          
-          localStorage.setItem('accessToken', access_token);
-          localStorage.setItem('refreshToken', refresh_token);
-          
-          originalRequest.headers.Authorization = `Bearer ${access_token}`;
-          return api(originalRequest);
-        }
-      } catch (refreshError) {
-        logoutUser();
-        return Promise.reject(refreshError);
-      }
+      const newToken = await refreshTokens();
+      originalRequest.headers.Authorization = `Bearer ${newToken}`;
+      return api(originalRequest);
     }
     return Promise.reject(error);
   }
 );
 
 function logoutUser() {
-  localStorage.clear();
-  if (window.location.pathname !== '/login') {
-    window.location.href = '/login';
-  }
+  clearTimeout(refreshTimer);
+  storage.clear();
+  if (window.location.pathname !== '/login') window.location.href = '/login';
 }
 
 export default api;
