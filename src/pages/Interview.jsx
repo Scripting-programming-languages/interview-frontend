@@ -55,6 +55,11 @@ export default function InterviewPage() {
 
         if (ignore) return;
 
+        if (!question) {
+          await finishInterview({ goToResults: true });
+          return;
+        }
+
         setCurrentQuestion(question);
         setQuestionText(question.full_text || "");
       } catch (err) {
@@ -188,6 +193,11 @@ export default function InterviewPage() {
         },
       });
 
+      if (!question) {
+        await finishInterview({ goToResults: true });
+        return;
+      }
+
       setCurrentQuestion(question);
       setQuestionText(question.full_text || "");
       setQuestionIndex((prev) => prev + 1);
@@ -195,7 +205,6 @@ export default function InterviewPage() {
       setIsQuestionLoading(false);
     }
   }
-
   async function finishInterview({ goToResults = true } = {}) {
     if (!attemptId) return;
 
@@ -243,7 +252,6 @@ export default function InterviewPage() {
       setIsPending(false);
     }
   }
-
   async function handleFinishEarly() {
     if (isPending || isRecording || !attemptId) return;
 

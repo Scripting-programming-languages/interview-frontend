@@ -1,4 +1,4 @@
-import { createChannel, createClient, Metadata } from 'nice-grpc-web';
+import { createChannel, createClient } from 'nice-grpc-web';
 import { storage } from './axios';
 import { QuestionStreamServiceDefinition } from '../grpc/interview';
 
@@ -28,18 +28,20 @@ export async function streamNextQuestion({ attemptId, onDelta }) {
     userId,
   };
 
-  const metadata = Metadata();
-  metadata.set('authorization', `Bearer ${accessToken}`);
+  const metadata = {
+    authorization: `Bearer ${accessToken}`,
+  };
 
   let fullText = '';
   let finalQuestion = null;
+  let hasAnyChunk = false;
 
   try {
-    const responseStream = client.streamNextQuestion(request, {
-      metadata,
-    });
+    const responseStream = client.streamNextQuestion(request, { metadata });
 
     for await (const chunk of responseStream) {
+      hasAnyChunk = true;
+
       if (chunk.textDelta) {
         fullText += chunk.textDelta;
         onDelta?.(fullText, chunk.textDelta);
@@ -67,7 +69,11 @@ export async function streamNextQuestion({ attemptId, onDelta }) {
       };
     }
 
-    throw new Error('Сервис не вернул вопрос');
+    if (!hasAnyChunk) {
+      return null;
+    }
+
+    return null;
   } catch (err) {
     throw new Error(err?.message || 'Ошибка при получении вопроса');
   }
