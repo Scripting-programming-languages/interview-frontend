@@ -42,13 +42,15 @@ export default function SelectRole() {
     setError(null);
     
     try {
-      const response = await api.post(`/courses/${selectedCourseId}/attempt`);
+      const response = await api.post(`/v2/courses/${selectedCourseId}/attempt`);
       const attemptData = response.data;
-      
+
       navigate(`/interview/${selectedCourseId}`, {
-        state: { 
-          attemptId: attemptData.attempt_id, 
-          questions: attemptData.questions 
+        state: {
+          attemptId: attemptData.attempt_id,
+          courseId: attemptData.course_id,
+          status: attemptData.status,
+          timestampStart: attemptData.timestamp_start ?? null,
         },
       });
     } catch (err) {
