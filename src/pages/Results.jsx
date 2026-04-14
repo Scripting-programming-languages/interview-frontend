@@ -39,15 +39,20 @@ export default function ResultsPage() {
   const questionSource = hasInitialQuestions ? initialQuestions : courseQuestions;
 
   useEffect(() => {
-    if (result) return;
-
     let ignore = false;
+
     setError("");
+
+    if (!result) {
+      setIsLoading(true);
+    }
 
     api
       .get(`/attempts/${attemptId}`)
       .then((res) => {
-        if (!ignore) setResult(res.data);
+        if (!ignore) {
+          setResult(res.data);
+        }
       })
       .catch((err) => {
         if (!ignore) {
@@ -59,13 +64,15 @@ export default function ResultsPage() {
         }
       })
       .finally(() => {
-        if (!ignore) setIsLoading(false);
+        if (!ignore) {
+          setIsLoading(false);
+        }
       });
 
     return () => {
       ignore = true;
     };
-  }, [attemptId, result]);
+  }, [attemptId]);
 
   useEffect(() => {
     if (!courseId || hasInitialQuestions || !isFinished) return;
@@ -75,10 +82,14 @@ export default function ResultsPage() {
     api
       .get(`/courses/${courseId}`)
       .then((res) => {
-        if (!ignore) setCourseQuestions(res.data?.questions || []);
+        if (!ignore) {
+          setCourseQuestions(res.data?.questions || []);
+        }
       })
       .catch(() => {
-        if (!ignore) setCourseQuestions([]);
+        if (!ignore) {
+          setCourseQuestions([]);
+        }
       });
 
     return () => {
