@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package interview;
+
+option java_multiple_files = true;
+option java_package = "com.github.scripting.programming.language.grpc";
+
+service QuestionStreamService {
+  /**
+   * Стрим для получения вопроса.
+   * Фронтенд отправляет ID попытки, бэкенд начинает передавать токены текста.
+   */
+  rpc StreamNextQuestion(NextQuestionRequest) returns (stream QuestionChunk);
+}
+
+message NextQuestionRequest {
+  int64 attempt_id = 1;
+  int64 user_id = 2;
+}
+
+message QuestionChunk {
+  oneof payload {
+    string text_delta = 1;
+    QuestionData final_data = 2; // Полные данные (ID, тип) в конце стрима
+  }
+}
+
+message QuestionData {
+  int64 question_id = 1;
+  string full_text = 2;
+  int32 complexity = 3;
+}
+
+message ErrorResponse {
+  string message = 1;
+  int32 code = 2;
+}

@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import { streamNextQuestion } from "../api/questionStream";
 import "../styles/interview.css";
 
 export default function InterviewPage() {
-  const { courseId } = useParams();
+  const { state } = useLocation();
   const navigate = useNavigate();
 
-  const [attemptId, setAttemptId] = useState(null);
-  const [questions, setQuestions] = useState([]);
-  const [current, setCurrent] = useState(0);
+  const attemptId = state?.attemptId ?? null;
+  const [currentQuestion, setCurrentQuestion] = useState(null);
+  const [questionText, setQuestionText] = useState("");
+  const [questionIndex, setQuestionIndex] = useState(1);
 
   const [isPageLoading, setIsPageLoading] = useState(true);
+  const [isQuestionLoading, setIsQuestionLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState("");
@@ -19,53 +22,64 @@ export default function InterviewPage() {
   const [audioBlob, setAudioBlob] = useState(null);
   const [audioDuration, setAudioDuration] = useState(0);
 
-  const mediaRecorderRef = useRef(null); // экземпляр MediaRecorder
-  const mediaStreamRef = useRef(null); // поток микрофона
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordStartedAtRef = useRef(null);
 
-  const currentQuestion = questions[current];
   const isAnswered = !!audioBlob;
 
   useEffect(() => {
     let ignore = false;
 
-    async function startInterview() {
+    async function loadFirstQuestion() {
+      if (!attemptId) {
+        navigate("/");
+        return;
+      }
+
       try {
         setIsPageLoading(true);
         setError("");
+        setCurrentQuestion(null);
+        setQuestionText("");
 
-        const { data } = await api.post(`/courses/${courseId}/attempt`);
+        const question = await streamNextQuestion({
+          attemptId,
+          onDelta: (fullText) => {
+            if (!ignore) {
+              setQuestionText(fullText);
+            }
+          },
+        });
 
         if (ignore) return;
 
-        setAttemptId(data.attempt_id);
-        setQuestions(data.questions || []);
+        if (!question) {
+          await finishInterview({ goToResults: true });
+          return;
+        }
+
+        setCurrentQuestion(question);
+        setQuestionText(question.full_text || "");
       } catch (err) {
         if (!ignore) {
-          setError(
-            err?.response?.data?.error ||
-              err.message ||
-              "Не удалось начать собеседование"
-          );
+          setError(err?.message || "Не удалось получить вопрос");
         }
       } finally {
-        if (!ignore) setIsPageLoading(false);
+        if (!ignore) {
+          setIsPageLoading(false);
+        }
       }
     }
 
-    startInterview();
+    loadFirstQuestion();
 
     return () => {
       ignore = true;
       stopMediaTracks();
     };
-  }, [courseId]);
-
-  const progress = useMemo(() => {
-    if (!questions.length) return 0;
-    return ((current + 1) / questions.length) * 100;
-  }, [current, questions.length]);
+  }, [attemptId, navigate]);
 
   function stopMediaTracks() {
     if (mediaStreamRef.current) {
@@ -134,7 +148,6 @@ export default function InterviewPage() {
 
   function stopRecording() {
     const recorder = mediaRecorderRef.current;
-
     if (!recorder) return;
 
     const duration = recordStartedAtRef.current
@@ -150,6 +163,10 @@ export default function InterviewPage() {
   }
 
   async function submitCurrentAnswer() {
+    if (!attemptId || !currentQuestion?.question_id || !audioBlob) {
+      throw new Error("Нет данных для отправки ответа");
+    }
+
     const formData = new FormData();
     formData.append("user_answer", audioBlob, "answer.webm");
     formData.append("audio_duration", String(Math.round(audioDuration)));
@@ -161,13 +178,41 @@ export default function InterviewPage() {
     );
   }
 
+  async function loadNextQuestion() {
+    setIsQuestionLoading(true);
+    setCurrentQuestion(null);
+    setQuestionText("");
+    setAudioBlob(null);
+    setAudioDuration(0);
+
+    try {
+      const question = await streamNextQuestion({
+        attemptId,
+        onDelta: (fullText) => {
+          setQuestionText(fullText);
+        },
+      });
+
+      if (!question) {
+        await finishInterview({ goToResults: true });
+        return;
+      }
+
+      setCurrentQuestion(question);
+      setQuestionText(question.full_text || "");
+      setQuestionIndex((prev) => prev + 1);
+    } finally {
+      setIsQuestionLoading(false);
+    }
+  }
   async function finishInterview({ goToResults = true } = {}) {
     if (!attemptId) return;
 
     const { data } = await api.patch(`/attempts/${attemptId}/finish`);
+
     if (goToResults) {
       navigate(`/results/${attemptId}`, {
-        state: { result: data, questions },
+        state: { result: data },
       });
     } else {
       navigate("/dashboard");
@@ -175,7 +220,7 @@ export default function InterviewPage() {
   }
 
   async function handleRecord() {
-    if (isPending) return;
+    if (isPending || isQuestionLoading) return;
     isRecording ? stopRecording() : startRecording();
   }
 
@@ -183,6 +228,7 @@ export default function InterviewPage() {
     if (
       isPending ||
       isRecording ||
+      isQuestionLoading ||
       !attemptId ||
       !currentQuestion ||
       !audioBlob
@@ -195,25 +241,17 @@ export default function InterviewPage() {
 
     try {
       await submitCurrentAnswer();
-
-      if (current === questions.length - 1) {
-        await finishInterview({ goToResults: true });
-      } else {
-        setCurrent((prev) => prev + 1);
-        setAudioBlob(null);
-        setAudioDuration(0);
-        setIsPending(false);
-      }
+      await loadNextQuestion();
     } catch (err) {
       setError(
         err?.response?.data?.error ||
-          err.message ||
-          "Не удалось отправить ответ"
+          err?.message ||
+          "Не удалось отправить ответ или получить следующий вопрос"
       );
+    } finally {
       setIsPending(false);
     }
   }
-
   async function handleFinishEarly() {
     if (isPending || isRecording || !attemptId) return;
 
@@ -224,12 +262,12 @@ export default function InterviewPage() {
       if (audioBlob && currentQuestion) {
         await submitCurrentAnswer();
       }
-      await finishInterview({ goToResults: false });
 
+      await finishInterview({ goToResults: false });
     } catch (err) {
       setError(
         err?.response?.data?.error ||
-          err.message ||
+          err?.message ||
           "Не удалось завершить собеседование"
       );
       setIsPending(false);
@@ -241,18 +279,18 @@ export default function InterviewPage() {
       <div className="interview-page">
         <div className="interview-card">
           <h1>Собеседование</h1>
-          <div className="question-card">Загрузка вопросов...</div>
+          <div className="question-card">Загрузка вопроса...</div>
         </div>
       </div>
     );
   }
 
-  if (!questions.length) {
+  if (error && !currentQuestion && !questionText) {
     return (
       <div className="interview-page">
         <div className="interview-card">
           <h1>Собеседование</h1>
-          <div className="question-card">{error || "Вопросы не найдены"}</div>
+          <div className="question-card">{error}</div>
         </div>
       </div>
     );
@@ -266,7 +304,7 @@ export default function InterviewPage() {
           <button
             className="finish-btn"
             onClick={handleFinishEarly}
-            disabled={isPending || isRecording}
+            disabled={isPending || isRecording || isQuestionLoading}
             type="button"
           >
             Завершить
@@ -274,20 +312,17 @@ export default function InterviewPage() {
         </div>
 
         <div className="progress-block">
-          <span>
-            Вопрос {current + 1} из {questions.length}
-          </span>
-          <div className="progress-bar">
-            <div style={{ width: `${progress}%` }} />
-          </div>
+          <span>Вопрос {questionIndex}</span>
         </div>
 
-        <div className="question-card">{currentQuestion.text}</div>
+        <div className="question-card">
+          {questionText || (isQuestionLoading ? "Загрузка следующего вопроса..." : "Вопрос не получен")}
+        </div>
 
         <button
           className={`record-circle ${isRecording ? "active" : ""}`}
           onClick={handleRecord}
-          disabled={isPending}
+          disabled={isPending || isQuestionLoading || !currentQuestion}
           aria-label={isRecording ? "Остановить запись" : "Начать запись"}
           type="button"
         />
@@ -296,15 +331,11 @@ export default function InterviewPage() {
 
         <button
           className="next-button"
-          disabled={!isAnswered || isRecording || isPending}
+          disabled={!isAnswered || isRecording || isPending || isQuestionLoading || !currentQuestion}
           onClick={handleNext}
           type="button"
         >
-          {isPending
-            ? "Обработка..."
-            : current === questions.length - 1
-            ? "Завершить интервью"
-            : "Следующий вопрос"}
+          {isPending || isQuestionLoading ? "Обработка..." : "Следующий вопрос"}
         </button>
       </div>
     </div>
